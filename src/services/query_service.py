@@ -19,10 +19,12 @@ logger = get_logger(__name__)
 
 
 def _serialize_source(doc: Document) -> Dict[str, Any]:
-    """Convert a LangChain Document into a JSON-serializable dict."""
+    """Lean serialization - filename + page only."""
+    md = doc.metadata or {}
     return {
-        "content": truncate_text(doc.page_content, max_chars=500),
-        "metadata": dict(doc.metadata or {}),
+        "file_name": md.get("file_name") or md.get("source", "unknown"),
+        "page": md.get("page"),
+        "document_id": md.get("document_id"),
     }
 
 

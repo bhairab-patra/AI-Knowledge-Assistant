@@ -28,8 +28,9 @@ class IngestResponse(BaseModel):
 
 
 class SourceDocument(BaseModel):
-    content: str
-    metadata: Dict[str, Any]
+    file_name: str
+    page: Optional[int] = None
+    document_id: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
