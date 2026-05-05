@@ -29,7 +29,7 @@ class IngestResponse(BaseModel):
 
 class SourceDocument(BaseModel):
     file_name: str
-    page: Optional[int] = None
+    page: List[int] = []
     document_id: Optional[str] = None
 
 
@@ -38,6 +38,8 @@ class QueryResponse(BaseModel):
     answer: str
     sources: List[SourceDocument] = []
     standalone_question: Optional[str] = None
+    confidence: Optional[float] = None              # 0.0 - 1.0
+    confidence_label: Optional[str] = None  
 
 
 class StatsResponse(BaseModel):

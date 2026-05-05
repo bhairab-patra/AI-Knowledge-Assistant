@@ -16,7 +16,7 @@ from src.api.routes import health as health_routes
 from src.api.routes import ingestion as ingestion_routes
 from src.api.routes import query as query_routes
 from src.utils.logger import get_logger
-
+from src.observability.tracing import setup_tracing  # ← new import
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -73,6 +73,7 @@ def create_app() -> FastAPI:
             "version": settings.APP_VERSION,
             "docs": f"{settings.API_PREFIX}/docs",
         }
+    setup_tracing(app)   
 
     return app
 

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+  <title>Knowledge Assistant</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      height: 100vh;
+      background-color: transparent;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="chat-root"></div>
+
+  <script>
+    // Get session from URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session') || '';
+
+    // Determine script source based on environment
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // Load widget script
+    const script = document.createElement('script');
+    script.src = isLocal
+      ? './chat-widget.umd.js'  // Local development
+      : '__CDN_URL__/chat-widget.umd.js'; // ← PLACEHOLDER - replaced during build
+
+    script.onload = () => {
+      // Render widget - let React component handle validation
+      document.getElementById('chat-root').innerHTML = `
+        <chat-widget 
+          session-id="${sessionId}"
+          iframe-mode="true">
+        </chat-widget>
+      `;
+    };
+
+    script.onerror = () => {
+      document.getElementById('chat-root').innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; height: 100vh; color: #dc3545; font-size: 16px;">
+          Failed to load chat widget. Please refresh the page.
+        </div>
+      `;
+    };
+
+    document.body.appendChild(script);
+  </script>
+</body>
+
+</html>

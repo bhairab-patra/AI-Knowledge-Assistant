@@ -17,6 +17,8 @@ from src.llm.bedrock_llm import get_llm_service
 from src.prompts.templates import CONVERSATIONAL_PROMPT, QUESTION_REWRITE_PROMPT
 from src.retrievers.retriever import build_retriever
 from src.utils.logger import get_logger
+from config.settings import settings
+from src.vectorstore.chroma_store import get_vector_store
 
 logger = get_logger(__name__)
 
@@ -90,11 +92,11 @@ class ConversationalRAGChain:
             return question
 
     def invoke(
-        self,
-        question: str,
-        chat_history: Optional[List[Dict[str, str]]] = None,
+    self,
+    question: str,
+    chat_history: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
-        """Run the conversational chain end-to-end."""
+        """Run the conversational chain end-to-end with confidence scoring."""
         if not question or not question.strip():
             raise ChainExecutionException("Question must not be empty")
 
@@ -109,8 +111,27 @@ class ConversationalRAGChain:
         )
 
         try:
+            # 1. Rewrite follow-up into a self-contained query (if needed)
             standalone_question = self._rewrite_if_needed(question, history_text)
-            docs: List[Document] = self.retriever.invoke(standalone_question)
+
+            # 2. Retrieve docs WITH scores so we can compute confidence
+            store = get_vector_store()
+            pairs = store.similarity_search_with_score(
+                standalone_question, k=settings.RETRIEVER_K
+            )
+            docs = [d for d, _ in pairs]
+            similarities = [max(0.0, 1.0 - dist / 2.0) for _, dist in pairs]
+
+            # 3. Aggregate similarities into one confidence value
+            confidence = sum(similarities) / len(similarities) if similarities else 0.0
+            if confidence >= 0.80:
+                confidence_label = "high"
+            elif confidence >= 0.55:
+                confidence_label = "medium"
+            else:
+                confidence_label = "low"
+
+            # 4. Build context + answer
             context = _format_docs_as_context(docs)
             answer = self._answer_chain.invoke(
                 {
@@ -119,6 +140,8 @@ class ConversationalRAGChain:
                     "question": question,
                 }
             )
+        except ChainExecutionException:
+            raise
         except Exception as exc:
             logger.error("Conversational chain failed", error=str(exc))
             raise ChainExecutionException(
@@ -130,4 +153,6 @@ class ConversationalRAGChain:
             "sources": docs,
             "question": question,
             "standalone_question": standalone_question,
+            "confidence": round(confidence, 3),
+            "confidence_label": confidence_label,
         }

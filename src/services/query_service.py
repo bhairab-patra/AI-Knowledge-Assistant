@@ -5,6 +5,7 @@ Translates raw inputs to chain inputs, formats source documents into
 serializable dicts, and provides a single point of orchestration for
 the API layer.
 """
+
 from typing import Any, Dict, List, Optional
 
 from langchain_core.documents import Document
@@ -18,14 +19,28 @@ from src.utils.validators import validate_query
 logger = get_logger(__name__)
 
 
-def _serialize_source(doc: Document) -> Dict[str, Any]:
-    """Lean serialization - filename + page only."""
-    md = doc.metadata or {}
-    return {
-        "file_name": md.get("file_name") or md.get("source", "unknown"),
-        "page": md.get("page"),
-        "document_id": md.get("document_id"),
-    }
+def _serialize_sources(docs: List[Document]) -> List[Dict[str, Any]]:
+    """
+    Group sources by file_name and collect unique pages.
+    Turns 5 chunks from the same PDF into a single entry with a pages list.
+    """
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for d in docs:
+        md = d.metadata or {}
+        file_name = md.get("file_name") or md.get("source", "unknown")
+        page = md.get("page")
+        document_id = md.get("document_id")
+
+        entry = grouped.setdefault(
+            file_name,
+            {"file_name": file_name, "pages": [], "document_id": document_id},
+        )
+        if page is not None and page not in entry["pages"]:
+            entry["pages"].append(page)
+
+    for entry in grouped.values():
+        entry["pages"].sort()
+    return list(grouped.values())
 
 
 class QueryService:
@@ -68,20 +83,27 @@ class QueryService:
         )
 
         result = chain.invoke(question)
+        confidence_label = result.get("confidence_label")
+        sources = (
+            [] if confidence_label == "low" else _serialize_sources(result.get("sources") or [])
+        )
+
         return {
             "question": result["question"],
             "answer": result["answer"],
-            "sources": [_serialize_source(d) for d in result.get("sources") or []],
+            "sources": sources,
+            "confidence": result.get("confidence"),
+            "confidence_label": result.get("confidence_label"),
         }
 
     # ------ Conversational Q&A ------
     def conversational_query(
-        self,
-        question: str,
-        chat_history: Optional[List[Dict[str, str]]] = None,
-        k: Optional[int] = None,
-        search_type: Optional[str] = None,
-        filter_dict: Optional[Dict[str, Any]] = None,
+    self,
+    question: str,
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    k: Optional[int] = None,
+    search_type: Optional[str] = None,
+    filter_dict: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Answer a question taking prior turns into account."""
         question = validate_query(question)
@@ -92,9 +114,19 @@ class QueryService:
         )
 
         result = chain.invoke(question, chat_history=chat_history)
+        confidence_label = result.get("confidence_label")
+
+        # Hide sources when confidence is low - they'd mislead the user
+        sources = (
+            [] if confidence_label == "low"
+            else _serialize_sources(result.get("sources") or [])
+        )
+
         return {
             "question": result["question"],
             "standalone_question": result.get("standalone_question"),
             "answer": result["answer"],
-            "sources": [_serialize_source(d) for d in result.get("sources") or []],
+            "sources": sources,
+            "confidence": result.get("confidence"),
+            "confidence_label": confidence_label,
         }
